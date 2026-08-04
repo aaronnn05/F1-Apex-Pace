@@ -1,0 +1,1 @@
+"""DuckDB database connection and table initialisation wrappers"""
