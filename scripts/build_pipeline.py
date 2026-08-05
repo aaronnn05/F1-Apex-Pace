@@ -1,0 +1,1 @@
+"""Master script to ingest raw data into DuckDB and output processed Parquet features."""
