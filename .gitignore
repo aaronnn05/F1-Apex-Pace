@@ -12,3 +12,7 @@ wheels/
 #FastF1 Cache
 data/raw/fastf1_cache
 .ruff_cache
+
+# misc
+*.ipynb
+*.duckdb
