@@ -9,10 +9,16 @@ wheels/
 # Virtual environments
 .venv
 
-#FastF1 Cache
-data/raw/fastf1_cache
+#Cache
 .ruff_cache
 
 # misc
 *.ipynb
-*.duckdb
+
+# MLOps & Experiment Tracking
+wandb/
+
+# Model Binaries & Data Artifacts
+models/
+data/
+.DS_Store
