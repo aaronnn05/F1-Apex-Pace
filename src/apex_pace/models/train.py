@@ -3,9 +3,10 @@
 from pathlib import Path
 
 import polars as pl
-import wandb
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
+
+import wandb
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_PATH = BASE_DIR / "data" / "processed" / "features_v1.parquet"
@@ -96,7 +97,7 @@ def train_and_log():
     # Log metrics to W&B cloud dashboard
     wandb.log({"test_mae": mae, "test_rmse": rmse})
 
-    # Save local model binary
+    # Save model locally first (merely so there's a file to upload to W&B)
     local_model_path = MODEL_DIR / "xgboost_baseline.json"
     model.save_model(str(local_model_path))
     print(f"\n✅ Local model artifact written to: {local_model_path}")
