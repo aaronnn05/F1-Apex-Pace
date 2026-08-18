@@ -13,7 +13,7 @@ DATA_PATH = BASE_DIR / "data" / "processed" / "features_v1.parquet"
 MODEL_DIR = BASE_DIR / "models"
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-def load_and_split_data(data_path: Path, event_name: str):
+def load_and_split_data(event_name: str, data_path: Path = DATA_PATH):
     """
     Loads feature matrix from Parquet and executes a temporal train/validation split.
     
@@ -21,7 +21,7 @@ def load_and_split_data(data_path: Path, event_name: str):
     In time-series/event data, random K-Fold cross-validation leaks future information 
     into the past. We strictly train on past seasons (2023) and validate on future seasons (2024).
     """
-    df = pl.read_parquet(DATA_PATH)
+    df = pl.read_parquet(data_path)
 
     feature_cols = [
         "prev_lap_time",

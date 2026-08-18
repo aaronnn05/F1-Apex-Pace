@@ -19,6 +19,6 @@ wheels/
 wandb/
 
 # Model Binaries & Data Artifacts
-models/
+models/*.json
 data/
 .DS_Store
