@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.139.2",
     "fastf1>=3.8.3",
     "ipykernel>=7.3.0",
+    "optuna>=4.9.0",
     "polars>=1.43.0",
     "pyarrow>=25.0.0",
     "pydantic>=2.13.4",

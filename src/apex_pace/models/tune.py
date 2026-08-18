@@ -8,12 +8,14 @@ Design Patterns Demonstrated:
 4. MLOps Logging of best trial params and slice metrics to Weights & Biases.
 """
 
-from pathLib import Path
+from pathlib import Path
+
 import optuna
 import polars as pl
 import xgboost as xgb
-import wandb
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
+
+import wandb
 
 # Supress verbose Optuna logs, only show warnings
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -99,7 +101,7 @@ def create_objective(X_train, y_train, X_test, y_test):
         preds = model.predict(X_test)
         mae = mean_absolute_error(y_test, preds)
 
-        return mae
+        return mae      # study's direction will maximise/minimise what this return
 
     return objective
 
@@ -140,3 +142,76 @@ def evaluate_slices(test_df: pl.DataFrame, y_pred: list) -> pl.DataFrame:
 
     return slice_summary
 
+# -----------------------------------------------------------------------------
+# 5. MASTER TUNING, EVALUATION & LOGGING PIPELINE
+# -----------------------------------------------------------------------------
+def run_tuning(n_trials: int = 25):
+    """Executes Optuna study, trains best model, and logs results to W&B."""
+
+    # 1. Initialise W&B Run
+    run = wandb.init(
+        project = "apex-pace",
+        name = "optuna-huber-tuned",
+        config={"optimisation_trials": n_trials, "search_strategy": "TPE"}      # config → information about the experiment / settings
+    )
+
+    # 2. Load data
+    X_train, y_train, X_test, y_test, test_df = load_data_with_slices()
+
+    # 3. Initialise and execute optuna study
+    study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
+    objective_fn = create_objective(X_train, y_train, X_test, y_test)
+    study.optimize(objective_fn, n_trials=n_trials, show_progress_bar=True)
+
+    best_params = study.best_params
+    print(f"\n🏆 Best Test MAE: {study.best_value:.4f} seconds")
+    print("📌 Optimal Hyperparameters:")
+    for param, value in best_params.items():
+        print(f"   - {param}: {value}")
+
+    # 4. Train final production model using best params
+    best_params["objective"] = "reg:pseudohubererror"       # these params aren't in the trial
+    best_params["random_state"] = 42
+    best_params["n_jobs"] = -1
+
+    final_model = xgb.XGBRegressor(**best_params)
+    final_model.fit(X_train, y_train)
+
+    # 5. Evaluate global test performance
+    y_pred = final_model.predict(X_test)
+    final_mae = mean_absolute_error(y_test, y_pred)
+    final_rmse = root_mean_squared_error(y_test, y_pred)
+
+    print("\n📊 Global Test Performance (2024 Bahrain GP):")
+    print(f"   - Final MAE : {final_mae:.4f} seconds")
+    print(f"   - Final RMSE: {final_rmse:.4f} seconds")
+
+    # 6. Run slice-based error analysis
+    slice_df = evaluate_slices(test_df, y_pred)
+    print("\n🔬 Slice-Based Error Analysis (Breakdown by Tyre Compound):")
+    print(slice_df)
+
+    # 7. Log everything to W&B
+    wandb.log({                 # log() → values produced during the experiment, wandb knows the current run
+        "tuned_mae": final_mae,
+        "tuned_rmse": final_rmse,
+        "best_params": best_params
+    })                                  
+
+    # Log slice analysis table directly to W&B UI
+    slice_table = wandb.Table(dataframe=slice_df.to_pandas())
+    wandb.log({"slice_analysis_table": slice_table})
+
+    # Save and register model binary
+    tuned_model_path = MODEL_DIR / "xgboost_tuned.json"
+    final_model.save_model(str(tuned_model_path))   # change to str cuz that's what sklearn wants lol
+
+    artifact = wandb.Artifact("xgboost-tuned", type="model")
+    artifact.add_file(str(tuned_model_path))
+    run.log_artifact(artifact)
+
+    print(f"\n✅ Tuned model binary registered and saved to: {tuned_model_path.resolve()}")
+    wandb.finish()
+
+if __name__ == "__main__":
+    run_tuning(n_trials=25)

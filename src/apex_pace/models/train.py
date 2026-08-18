@@ -70,7 +70,7 @@ def train_and_log():
             "random_state": 42
         }
     )
-    config = wandb.config
+    config = wandb.config       # wandb.config saved whatever in the run's config
 
     X_train, y_train, X_test, y_test = load_and_split_data(DATA_PATH, "Bahrain")
 
