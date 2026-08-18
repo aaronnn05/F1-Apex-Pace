@@ -102,3 +102,41 @@ def create_objective(X_train, y_train, X_test, y_test):
         return mae
 
     return objective
+
+# -----------------------------------------------------------------------------
+# 4. SLICE-BASED ERROR ANALYSIS
+# -----------------------------------------------------------------------------
+def evaluate_slices(test_df: pl.DataFrame, y_pred: list) -> pl.DataFrame:
+    """
+    Computes performance metrics across domain-specific data slices.
+    
+    Why Slice Analysis?
+    Global metrics (e.g. overall MAE = 0.38s) can hide severe localized failures.
+    A model might perform great on Medium tyres (0.25s MAE) but fail dangerously
+    on Soft tyres (0.85s MAE) due to rapid non-linear thermal degradation.
+    """
+    eval_df = test_df.with_columns([
+        pl.Series(name="y_pred", values=y_pred),
+        (pl.col("LapTimeSeconds") - y_pred).abs().alias("abs_error")
+    ])
+
+    compound_map = {1: "SOFT", 2: "MEDIUM", 3: "HARD", 4: "INTERMEDIATE", 5: "WET"}
+
+    # Aggregate performance by Tyre Compound
+    slice_summary = (
+        eval_df.group_by("compound_code")
+        .agg([
+            pl.count().alias("laps_evaluated"),
+            pl.col("abs_error").mean().round(4).alias("slice_mae"),
+            pl.col("abs_error").quantile(0.95).round(4).alias("p95_error"), # 95% of predictions have an absolute error ≤ this value
+            pl.col("abs_error").max().round(4).alias("max_error")
+        ])
+        .with_columns(
+            pl.col("compound_code").replace(compound_map, default="UNKNOWN").alias("compound")
+        )
+        .select(["compound", "laps_evaluated", "slice_mae", "p95_error", "max_error"])
+        .sort("slice_mae")
+    )
+
+    return slice_summary
+
