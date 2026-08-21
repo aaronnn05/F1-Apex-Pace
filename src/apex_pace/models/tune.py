@@ -89,6 +89,7 @@ def create_objective(X_train, y_train, X_test, y_test):
             "reg_lambda": trial.suggest_float("reg_lambda", 1e-3, 10.0, log=True),
             # Fixed settings
             "objective": "reg:pseudohubererror",
+            "base_score": float(y_train.mean()),
             "random_state": 42,
             "n_jobs": -1,
         }
@@ -171,6 +172,7 @@ def run_tuning(n_trials: int = 25):
 
     # 4. Train final production model using best params
     best_params["objective"] = "reg:pseudohubererror"       # these params aren't in the trial
+    best_params["base_score"] = float(y_train.mean())
     best_params["random_state"] = 42
     best_params["n_jobs"] = -1
 
