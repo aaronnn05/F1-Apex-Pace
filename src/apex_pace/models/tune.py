@@ -188,7 +188,7 @@ def run_tuning(n_trials: int = 25):
 
     # 4. Train final production model using best params
     best_params["objective"] = "reg:pseudohubererror"       # these params aren't in the trial
-    best_params["base_score"] = float(y_train.mean())
+    best_params["base_score"] = float(y_train_val.mean())
     best_params["random_state"] = 42
     best_params["n_jobs"] = -1
 

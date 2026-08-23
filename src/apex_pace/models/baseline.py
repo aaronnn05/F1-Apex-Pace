@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
@@ -53,8 +54,39 @@ def load_and_split_data(event_name: str, data_path: Path = DATA_PATH):
 
     return X_train, y_train, X_test, y_test 
 
+def mean_baseline():
+    """
+    Predicts the same value (mean from y_train) for every lap in the test set.
+    """
+    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)  # noqa: RUF059
 
-def train_and_log():
+    y_pred = np.full(
+        len(y_test), y_train.mean()
+    )
+
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = root_mean_squared_error(y_test, y_pred)
+
+    print("\n📊 Test Results using Mean (2024 Bahrain GP):")
+    print(f"   - Mean Absolute Error (MAE) : {mae:.4f} seconds")
+    print(f"   - Root Mean Squared Error (RMSE): {rmse:.4f} seconds")
+
+def previous_lap_baseline():
+    """
+    Predicts the lap time of the current lap will take approximately the same time as the previous lap
+    """
+    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)  # noqa: RUF059
+
+    y_pred = X_test["prev_lap_time"].values
+
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = root_mean_squared_error(y_test, y_pred)
+
+    print("\n📊 Test Results using Previous Lap (2024 Bahrain GP):")
+    print(f"   - Mean Absolute Error (MAE) : {mae:.4f} seconds")
+    print(f"   - Root Mean Squared Error (RMSE): {rmse:.4f} seconds")
+
+def train_baseline_model():
     """Executes model training, evaluates metrics, and logs metadata to W&B."""
 
     X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)
@@ -92,7 +124,7 @@ def train_and_log():
     mae = mean_absolute_error(y_test, y_pred)
     rmse = root_mean_squared_error(y_test, y_pred)
 
-    print("\n📊 Validation Results (2024 Bahrain GP):")
+    print("\n📊 Test Results using Baseline Model (2024 Bahrain GP):")
     print(f"   - Mean Absolute Error (MAE) : {mae:.4f} seconds")
     print(f"   - Root Mean Squared Error (RMSE): {rmse:.4f} seconds")
 
