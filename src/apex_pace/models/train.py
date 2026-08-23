@@ -36,12 +36,12 @@ def load_and_split_data(event_name: str, data_path: Path = DATA_PATH):
     train_df = df.filter(
             pl.col("Year") == 2023, 
             pl.col("EventName") == event_name
-            )
+            ).sort(["LapNumber", "Driver"])
     
     test_df = df.filter(
             pl.col("Year") == 2024,
             pl.col("EventName") == event_name    
-            )
+            ).sort(["LapNumber", "Driver"])
 
     # Convert Polars selections to NumPy/Pandas structures expected by XGBoost & Scikit-Learn
     X_train = train_df.select(feature_cols).to_pandas()
@@ -57,29 +57,31 @@ def load_and_split_data(event_name: str, data_path: Path = DATA_PATH):
 def train_and_log():
     """Executes model training, evaluates metrics, and logs metadata to W&B."""
 
+    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)
+
     # Initialize Weights & Biases Run for tracking
     run = wandb.init(
-        project="apex-pace",
-        name="xgboost-huber-baseline",
-        config={
-            "model_type": "XGBoost",
-            "objective": "reg:pseudohubererror",
-            "n_estimators": 100,
-            "learning_rate": 0.05,
-            "max_depth":5,
-            "random_state": 42
-        }
-    )
+            project="apex-pace",
+            name="xgboost-huber-baseline",
+            config={
+                "model_type": "XGBoost",
+                "objective": "reg:pseudohubererror",
+                "base_score": float(y_train.mean()),
+                "n_estimators": 100,
+                "learning_rate": 0.05,
+                "max_depth":5,
+                "random_state": 42
+            }
+        )
     config = wandb.config       # wandb.config saved whatever in the run's config
-
-    X_train, y_train, X_test, y_test = load_and_split_data(DATA_PATH, "Bahrain")
 
     model = xgb.XGBRegressor(
         n_estimators=config.n_estimators,
         learning_rate=config.learning_rate,
         max_depth=config.max_depth,
         objective=config.objective,
-        random_state=config.random_state
+        random_state=config.random_state,
+        base_score=config.base_score
     )
 
     model.fit(X_train, y_train)

@@ -21,6 +21,29 @@ import wandb
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 # -----------------------------------------------------------------------------
+# HELPER FUNCTION
+# -----------------------------------------------------------------------------
+def split_xy(data):
+    """
+    Split data into X and y.
+    """
+    feature_cols = [
+                "prev_lap_time",
+                "rolling_3lap_mean",
+                "compound_code",
+                "is_fresh_tyre",
+                "TyreLife"
+            ]
+    
+    target_col = "LapTimeSeconds"
+
+    X = data.select(feature_cols).to_pandas()
+    y = data.select(target_col).to_pandas().values.ravel()
+
+    return X, y
+
+
+# -----------------------------------------------------------------------------
 # 1. DIRECTORY RESOLUTION & SETUP
 # -----------------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -38,40 +61,33 @@ def load_data_with_slices(data_path: Path = DATA_PATH, target_event: str = "Bahr
     """
     df = pl.read_parquet(data_path)
 
-    feature_cols = [
-            "prev_lap_time",
-            "rolling_3lap_mean",
-            "compound_code",
-            "is_fresh_tyre",
-            "TyreLife"
-        ]
+    # Temporal Split: 2023 data for train and val, 2024 for test
+    bahrain_2023 = (df.filter(pl.col("Year") == 2023, pl.col("EventName") == target_event).sort(["LapNumber", "Driver"]))
+    test_df = df.filter(pl.col("Year") == 2024, pl.col("EventName") == target_event).sort(["LapNumber", "Driver"])
 
-    target_col = "LapTimeSeconds"
-
-    # Temporal Split: 2023 data for train, 2024 for test
-    train_df = df.filter(pl.col("Year") == 2023, pl.col("EventName") == target_event)
-    test_df = df.filter(pl.col("Year") == 2024, pl.col("EventName") == target_event)
+    split_idx = int(len(bahrain_2023) * 0.8)
+    train_df = bahrain_2023[:split_idx]
+    val_df = bahrain_2023[split_idx:]
 
     # Feature and Target extractions
-    X_train = train_df.select(feature_cols).to_pandas()
-    y_train = train_df.select(target_col).to_pandas().values.ravel()
+    X_train, y_train = split_xy(train_df)
+    X_val, y_val = split_xy(val_df)
+    X_test, y_test = split_xy(test_df)
+    X_train_val, y_train_val = split_xy(bahrain_2023)
 
-    X_test = test_df.select(feature_cols).to_pandas()
-    y_test = test_df.select(target_col).to_pandas().values.ravel()
-
-    return X_train, y_train, X_test, y_test, test_df
+    return X_train, y_train, X_val, y_val, X_test, y_test, X_train_val, y_train_val, test_df
 
 # -----------------------------------------------------------------------------
 # 3. OPTUNA OBJECTIVE CLOSURE
 # -----------------------------------------------------------------------------
-def create_objective(X_train, y_train, X_test, y_test):
+def create_objective(X_train, y_train, X_val, y_val):
     """
-    Closure pattern: Returns an objective function parameterized with train test df.
+    Closure pattern: Returns an objective function parameterized with training and validation data.
     
     Why use a closure?
     Optuna's `study.optimize` requires a callable with signature `objective(trial)`.
     Wrapping it inside this factory function gives the inner `objective` access
-    to `X_train`, `y_train`, `X_test`, and `y_test` without global variables,
+    to X_train, y_train, X_val, y_val without global variables,
     i.e. a reusable function + remembered variables within create_objective's scope.
     """
     def objective(trial: optuna.Trial) -> float:
@@ -99,8 +115,8 @@ def create_objective(X_train, y_train, X_test, y_test):
         model.fit(X_train, y_train)
 
         # Generate trial predictions & calculate target optimization metrics
-        preds = model.predict(X_test)
-        mae = mean_absolute_error(y_test, preds)
+        preds = model.predict(X_val)
+        mae = mean_absolute_error(y_val, preds)
 
         return mae      # study's direction will maximise/minimise what this return
 
@@ -157,15 +173,15 @@ def run_tuning(n_trials: int = 25):
     )
 
     # 2. Load data
-    X_train, y_train, X_test, y_test, test_df = load_data_with_slices()
-
+    X_train, y_train, X_val, y_val, X_test, y_test, X_train_val, y_train_val, test_df = load_data_with_slices()
+    
     # 3. Initialise and execute optuna study
     study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
-    objective_fn = create_objective(X_train, y_train, X_test, y_test)
+    objective_fn = create_objective(X_train, y_train, X_val, y_val)
     study.optimize(objective_fn, n_trials=n_trials, show_progress_bar=True)
 
     best_params = study.best_params
-    print(f"\n🏆 Best Test MAE: {study.best_value:.4f} seconds")
+    print(f"\n🏆 Best Validation MAE: {study.best_value:.4f} seconds")
     print("📌 Optimal Hyperparameters:")
     for param, value in best_params.items():
         print(f"   - {param}: {value}")
@@ -177,7 +193,7 @@ def run_tuning(n_trials: int = 25):
     best_params["n_jobs"] = -1
 
     final_model = xgb.XGBRegressor(**best_params)
-    final_model.fit(X_train, y_train)
+    final_model.fit(X_train_val, y_train_val)
 
     # 5. Evaluate global test performance
     y_pred = final_model.predict(X_test)
@@ -216,4 +232,4 @@ def run_tuning(n_trials: int = 25):
     wandb.finish()
 
 if __name__ == "__main__":
-    run_tuning(n_trials=25)
+    load_data_with_slices()
