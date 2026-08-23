@@ -8,6 +8,7 @@ import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
 import wandb
+from apex_pace.models.tune import evaluate_slices
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_PATH = BASE_DIR / "data" / "processed" / "features_v1.parquet"
@@ -52,13 +53,13 @@ def load_and_split_data(event_name: str, data_path: Path = DATA_PATH):
     X_test = test_df.select(feature_cols).to_pandas()
     y_test = test_df.select(target_col).to_pandas().values.ravel()
 
-    return X_train, y_train, X_test, y_test 
+    return X_train, y_train, X_test, y_test, test_df
 
 def mean_baseline():
     """
     Predicts the same value (mean from y_train) for every lap in the test set.
     """
-    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)  # noqa: RUF059
+    _, y_train, _, y_test, _ = load_and_split_data("Bahrain", DATA_PATH)
 
     y_pred = np.full(
         len(y_test), y_train.mean()
@@ -75,7 +76,7 @@ def previous_lap_baseline():
     """
     Predicts the lap time of the current lap will take approximately the same time as the previous lap
     """
-    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)  # noqa: RUF059
+    _, _, X_test, y_test, test_df = load_and_split_data("Bahrain", DATA_PATH)
 
     y_pred = X_test["prev_lap_time"].values
 
@@ -86,10 +87,13 @@ def previous_lap_baseline():
     print(f"   - Mean Absolute Error (MAE) : {mae:.4f} seconds")
     print(f"   - Root Mean Squared Error (RMSE): {rmse:.4f} seconds")
 
+    slice_summary = evaluate_slices(test_df, y_pred)
+    print("\n", slice_summary)
+
 def train_baseline_model():
     """Executes model training, evaluates metrics, and logs metadata to W&B."""
 
-    X_train, y_train, X_test, y_test = load_and_split_data("Bahrain", DATA_PATH)
+    X_train, y_train, X_test, y_test, _ = load_and_split_data("Bahrain", DATA_PATH)
 
     # Initialize Weights & Biases Run for tracking
     run = wandb.init(
