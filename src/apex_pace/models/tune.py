@@ -54,7 +54,7 @@ MODEL_DIR.mkdir(parents=True, exist_ok=True)
 # -----------------------------------------------------------------------------
 # 2. DATA EXTRACTION WITH SLICE METADATA RETENTION
 # -----------------------------------------------------------------------------
-def load_data_with_slices(data_path: Path = DATA_PATH, target_event: str = "Bahrain"):
+def load_split_data(data_path: Path = DATA_PATH, target_event: str = "Bahrain"):
     """
     Loads dataset, performs temporal split, and returns evaluation DataFrame
     with raw categorical columns intact for slice-based error analysis.
@@ -147,13 +147,14 @@ def evaluate_slices(test_df: pl.DataFrame, y_pred: list) -> pl.DataFrame:
         .agg([
             pl.count().alias("laps_evaluated"),
             pl.col("abs_error").mean().round(4).alias("slice_mae"),
+            (pl.col("abs_error")**2).mean().sqrt().round(4).alias("slice_rmse"),
             pl.col("abs_error").quantile(0.95).round(4).alias("p95_error"), # 95% of predictions have an absolute error ≤ this value
             pl.col("abs_error").max().round(4).alias("max_error")
         ])
         .with_columns(
             pl.col("compound_code").replace(compound_map, default="UNKNOWN").alias("compound")
         )
-        .select(["compound", "laps_evaluated", "slice_mae", "p95_error", "max_error"])
+        .select(["compound", "laps_evaluated", "slice_mae", "slice_rmse", "p95_error", "max_error"])
         .sort("slice_mae")
     )
 
@@ -173,7 +174,7 @@ def run_tuning(n_trials: int = 25):
     )
 
     # 2. Load data
-    X_train, y_train, X_val, y_val, X_test, y_test, X_train_val, y_train_val, test_df = load_data_with_slices()
+    X_train, y_train, X_val, y_val, X_test, y_test, X_train_val, y_train_val, test_df = load_split_data()
     
     # 3. Initialise and execute optuna study
     study = optuna.create_study(direction="minimize", sampler=optuna.samplers.TPESampler(seed=42))
@@ -232,4 +233,4 @@ def run_tuning(n_trials: int = 25):
     wandb.finish()
 
 if __name__ == "__main__":
-    load_data_with_slices()
+    load_split_data()
