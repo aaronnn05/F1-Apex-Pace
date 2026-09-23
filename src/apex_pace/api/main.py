@@ -11,12 +11,13 @@ MODEL_PATH = BASE_DIR / "models" / "xgboost_tuned.json"
 ml_model = xgb.XGBRegressor()
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):       # lifespan defines what should happen when the application starts
     if not MODEL_PATH.exists():
         raise FileNotFoundError(f"Model not found: {MODEL_PATH}")
 
     ml_model.load_model(str(MODEL_PATH))
-    yield
+    yield       # marks boundary between startup and shutdown
+    # E.g. you could have code here that runs during shutdown
 
 app = FastAPI(
     title="ApexPace API",
