@@ -22,13 +22,13 @@ async def lifespan(app: FastAPI):       # lifespan defines what should happen wh
 app = FastAPI(
     title="ApexPace API",
     description="F1 lap-time prediction API",
-    versipn="1.0.0",
+    version="1.0.0",
     lifespan=lifespan
 )
 
 class LapPredictionRequest(BaseModel):
     prev_lap_time: float = Field(..., ge=60.0, le=150.0)
-    rolling_3lap_mean: float = Field(..., ge=6-.0, le=150.0)
+    rolling_3lap_mean: float = Field(..., ge=60.0, le=150.0)
     compound_code: int = Field(..., ge=1, le=5)
     is_fresh_tyre: int = Field(..., ge=0, le=1)
     TyreLife: int = Field(..., ge=1, le=60)
